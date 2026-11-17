@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileShot · Herramientas de archivos con minijuegos</title>
+    <meta name="description" content="Comprime imágenes, une y divide PDF, convierte imágenes a PDF y crea ZIP en tu navegador. Para procesar, encesta, marca un gol o haz un home run.">
+    <meta name="theme-color" content="#0b1120">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="FileShot · Herramientas de archivos con minijuegos">
+    <meta property="og:description" content="Comprime, une y convierte archivos en tu navegador. Pero primero, encesta.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
+    <!-- Apply the saved theme before first paint. -->
+    <script>try { const s = localStorage.getItem('fileshot-theme'); if (s) document.documentElement.dataset.theme = s; } catch (e) {}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="top">
+        <a class="logo" href="#" aria-label="FileShot">
+            <span class="logo-ball" aria-hidden="true"></span>
+            <span>File<b>Shot</b></span>
+        </a>
+        <p class="tagline" data-i18n="tagline"></p>
+        <div class="controls">
+            <button id="theme-btn" class="icon-btn" type="button" data-i18n-aria="theme">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+            </button>
+            <label class="lang"><span class="sr-only" data-i18n="lang"></span><select id="lang-select"></select></label>
+        </div>
+    </header>
+
+    <main id="main">
+        <!-- HOME -->
+        <section id="view-home" class="view">
+            <div class="hero">
+                <h1 data-i18n-html="heroT"></h1>
+                <p data-i18n="heroD"></p>
+                <p class="privacy"><span class="dot" aria-hidden="true"></span><span data-i18n="privacy"></span></p>
+            </div>
+            <div class="tool-grid" id="tool-grid"></div>
+        </section>
+
+        <!-- TOOL -->
+        <section id="view-tool" class="view" hidden>
+            <a class="back" href="#">← <span data-i18n="back"></span></a>
+            <div class="tool-head">
+                <span class="tool-emoji" id="tool-emoji" aria-hidden="true"></span>
+                <div>
+                    <h1 id="tool-title"></h1>
+                    <p id="tool-desc"></p>
+                    <p class="chip" id="tool-sport"></p>
+                </div>
+            </div>
+
+            <label class="drop" id="drop">
+                <input type="file" id="file-input" class="sr-only">
+                <span class="drop-icon" aria-hidden="true">⬆</span>
+                <strong data-i18n="dropT"></strong>
+                <span class="drop-or" data-i18n="dropOr"></span>
+                <span class="btn btn-ghost" data-i18n="dropBtn"></span>
+                <small id="drop-formats"></small>
+            </label>
+
+            <p class="notice" id="tool-notice" role="status" hidden></p>
+            <ul class="file-list" id="file-list"></ul>
+            <div class="options" id="options"></div>
+
+            <div class="play-row">
+                <button class="btn btn-primary btn-play" id="play-btn" type="button" data-i18n="play"></button>
+                <span class="play-hint" id="play-hint" aria-live="polite"></span>
+            </div>
+        </section>
+
+        <!-- GAME -->
+        <section id="view-game" class="view" hidden>
+            <div class="hud">
+                <div>
+                    <p class="chip" id="game-sport"></p>
+                    <p class="how" id="game-how"></p>
+                </div>
+                <div class="fails" aria-live="polite">
+                    <span data-i18n="fails"></span>
+                    <span class="pips" id="pips"><i></i><i></i><i></i></span>
+                </div>
+            </div>
+            <div class="stage">
+                <canvas id="game-canvas" tabindex="0"></canvas>
+                <button class="skip" id="skip-btn" type="button" hidden>
+                    <span class="skip-glow" aria-hidden="true"></span>
+                    <span data-i18n="skip"></span> <span aria-hidden="true">→</span>
+                </button>
+            </div>
+            <button class="btn btn-ghost btn-small" id="cancel-btn" type="button" data-i18n="cancel"></button>
+        </section>
+
+        <!-- RESULT -->
+        <section id="view-result" class="view" hidden>
+            <div class="result" id="result-box">
+                <div class="spinner" id="spinner" aria-hidden="true"></div>
+                <h1 id="result-title" tabindex="-1"></h1>
+                <p id="result-text"></p>
+                <ul class="savings" id="savings"></ul>
+                <div class="result-actions">
+                    <a class="btn btn-primary" id="download-btn" hidden></a>
+                    <button class="btn btn-ghost" id="again-btn" type="button" data-i18n="again"></button>
+                    <a class="btn btn-ghost" href="#" data-i18n="otherTools"></a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="foot">
+        <span><span data-i18n="madeBy"></span> <a href="https://jheremysanchez7e9-web.github.io/PersonalPortfolio/" target="_blank" rel="noopener">Jheremy Sánchez</a> · <a href="https://github.com/jheremysebastian17/fileshot" target="_blank" rel="noopener" data-i18n="code"></a></span>
+        <span data-i18n="libs"></span>
+    </footer>
+
+    <script src="vendor/matter.min.js"></script>
+    <script src="vendor/pdf-lib.min.js"></script>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
