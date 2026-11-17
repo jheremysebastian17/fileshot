@@ -99,7 +99,7 @@ main { width: min(1100px, 100%); margin: 0 auto; padding: 32px clamp(16px, 4vw, 
 .tool-card p { color: var(--muted); font-size: .95rem; flex: 1; }
 .tool-card .chip { align-self: flex-start; background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }
 .tool-card-emoji { font-size: 2.6rem; line-height: 1; transition: transform .3s; }
-.s-basket { --c: #f97316; } .s-football { --c: #22c55e; } .s-baseball { --c: #ef4444; } .s-golf { --c: #14b8a6; } .s-bowling { --c: #818cf8; }
+.s-basket { --c: #f97316; } .s-football { --c: #22c55e; } .s-baseball { --c: #ef4444; } .s-golf { --c: #14b8a6; } .s-bowling { --c: #818cf8; } .s-darts { --c: #eab308; }
 
 /* ---------- tool view ---------- */
 .back { display: inline-block; color: var(--muted); text-decoration: none; margin-bottom: 18px; font-weight: 600; }

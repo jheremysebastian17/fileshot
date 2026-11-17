@@ -10,6 +10,12 @@ export class ToolError extends Error {
 
 const bytes = async (file) => new Uint8Array(await file.arrayBuffer());
 const baseName = (name) => name.replace(/\.[^.]+$/, '');
+
+// Formats are recognised by extension: browsers often send an empty MIME type (e.g. .md, .heic on Windows).
+export const ext = (name) => (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
+export const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'gif', 'bmp', 'svg', 'ico', 'heic', 'heif'];
+export const TEXT_EXT = ['txt', 'md', 'csv', 'tsv', 'json', 'xml', 'log', 'html', 'htm', 'yml', 'yaml', 'ini'];
+const isText = (f) => TEXT_EXT.includes(ext(f.name)) || f.type.startsWith('text/');
 const pdfBlob = (data) => new Blob([data], { type: 'application/pdf' });
 
 async function loadPdf(file) {
@@ -72,8 +78,21 @@ export async function splitPdf([file], { mode, ranges }) {
 async function decode(file) {
   try {
     return await createImageBitmap(file);
+  } catch { /* SVG and ICO are not supported by createImageBitmap in every browser: try an <img> */ }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    // SVG is vector: render it at 1600 px on its longest side instead of its tiny default (often 300x150).
+    const w = img.naturalWidth || 1024;
+    const h = img.naturalHeight || 1024;
+    const k = ext(file.name) === 'svg' || file.type === 'image/svg+xml' ? 1600 / Math.max(w, h) : 1;
+    return await createImageBitmap(img, { resizeWidth: Math.round(w * k), resizeHeight: Math.round(h * k) });
   } catch {
-    throw new ToolError('errImg', { name: file.name });
+    throw new ToolError('errImg', { name: file.name }); // e.g. HEIC outside Safari, or a damaged file
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -92,7 +111,7 @@ export async function compressImages(files, { quality = 0.7, maxSide = Infinity 
   for (const f of files) {
     const bmp = await decode(f);
     // JPEG has no transparency, so PNG/WebP sources become WebP (keeps alpha, much smaller than PNG).
-    const type = f.type === 'image/jpeg' ? 'image/jpeg' : 'image/webp';
+    const type = f.type === 'image/jpeg' || ['jpg', 'jpeg'].includes(ext(f.name)) ? 'image/jpeg' : 'image/webp';
     const blob = await canvasBlob(toCanvas(bmp, maxSide), type, quality);
     bmp.close();
     const ext = type === 'image/jpeg' ? 'jpg' : 'webp';
@@ -105,9 +124,40 @@ export async function compressImages(files, { quality = 0.7, maxSide = Infinity 
 }
 
 const A4 = [595.28, 841.89];
+
+/** Lays out plain text on A4 pages with Courier (fixed width keeps CSV/JSON/code columns aligned). */
+export async function addTextPages(doc, text, title) {
+  const font = await doc.embedFont(PDFLib.StandardFonts.Courier);
+  const bold = await doc.embedFont(PDFLib.StandardFonts.CourierBold);
+  const size = 10;
+  const lineH = 13;
+  const margin = 50;
+  const cols = Math.floor((A4[0] - margin * 2) / (size * 0.6));
+  const rows = Math.floor((A4[1] - margin * 2 - lineH * 2) / lineH);
+  // Standard PDF fonts only cover Latin-1 (WinAnsi): other characters (emoji, CJK…) become "?".
+  const safe = new Map();
+  const clean = (s) => [...s].map((ch) => {
+    if (!safe.has(ch)) { try { font.encodeText(ch); safe.set(ch, ch); } catch { safe.set(ch, '?'); } }
+    return safe.get(ch);
+  }).join('');
+  const lines = [];
+  for (const raw of text.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').split('\n')) {
+    const line = clean(raw);
+    if (!line) { lines.push(''); continue; }
+    for (let i = 0; i < line.length; i += cols) lines.push(line.slice(i, i + cols));
+  }
+  for (let start = 0; start < Math.max(lines.length, 1); start += rows) {
+    const page = doc.addPage(A4);
+    page.drawText(clean(title), { x: margin, y: A4[1] - margin, size, font: bold, color: PDFLib.rgb(0.35, 0.35, 0.35) });
+    lines.slice(start, start + rows).forEach((l, i) => page.drawText(l, { x: margin, y: A4[1] - margin - lineH * (i + 2), size, font }));
+  }
+}
+
+/** Images and text files, in the given order, into one PDF. */
 export async function imagesToPdf(files, { pageSize = 'fit' }) {
   const doc = await PDFLib.PDFDocument.create();
   for (const f of files) {
+    if (isText(f)) { await addTextPages(doc, await f.text(), f.name); continue; }
     let img;
     if (f.type === 'image/jpeg' || f.type === 'image/png') {
       try {
@@ -131,7 +181,38 @@ export async function imagesToPdf(files, { pageSize = 'fit' }) {
       doc.addPage([img.width, img.height]).drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
     }
   }
-  return [{ name: files.length === 1 ? `${baseName(files[0].name)}.pdf` : 'fileshot-images.pdf', blob: pdfBlob(await doc.save()) }];
+  return [{ name: files.length === 1 ? `${baseName(files[0].name)}.pdf` : 'fileshot.pdf', blob: pdfBlob(await doc.save()) }];
+}
+
+/** Renders every page of a PDF as JPG or PNG with pdf.js (loaded only when this tool is used: ~1.7 MB). */
+export async function pdfToImages([file], { format = 'jpeg', scale = 2 }) {
+  const pdfjs = await import('../vendor/pdfjs/pdf.min.mjs');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
+  let pdf;
+  try {
+    pdf = await pdfjs.getDocument({ data: await bytes(file) }).promise;
+  } catch {
+    throw new ToolError('errPdf', { name: file.name });
+  }
+  const base = baseName(file.name);
+  const width = String(pdf.numPages).length;
+  const e = format === 'png' ? 'png' : 'jpg';
+  const out = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const vp = page.getViewport({ scale });
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(vp.width);
+    c.height = Math.ceil(vp.height);
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; // JPG has no transparency: paint the paper white
+    g.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: g, viewport: vp }).promise;
+    out.push({ name: `${base}-${String(i).padStart(width, '0')}.${e}`, blob: await canvasBlob(c, `image/${format}`, 0.9) });
+    page.cleanup();
+  }
+  await pdf.destroy();
+  return out;
 }
 
 /* ---------- ZIP ---------- */

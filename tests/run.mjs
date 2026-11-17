@@ -65,6 +65,18 @@ await test('zipFiles round-trips and de-duplicates names', async () => {
   assert.equal(new TextDecoder().decode(entries['a (2).txt']), 'world');
 });
 
+await test('imagesToPdf: text files become paginated, readable PDF pages', async () => {
+  const long = Array.from({ length: 130 }, (_, i) => `line ${i + 1}; café, 3,50 €`).join('\n');
+  const [out] = await tools.imagesToPdf([file("data.csv", long, "text/csv"), file("emoji.txt", "hola 👋 你好", "")], {});
+  // 130 lines need 3 pages at ~60 lines per page, plus 1 page for the short file.
+  assert.equal(await pagesOf(out.blob), 4);
+});
+
+await test('ext() is case-insensitive and handles names without a dot', () => {
+  assert.equal(tools.ext("Foto.HEIC"), "heic");
+  assert.equal(tools.ext("README"), "");
+});
+
 await test('translations: every language has the same keys', () => {
   const keys = allKeys();
   for (const [l, k] of Object.entries(keys)) assert.deepEqual(k.slice().sort(), keys.es.slice().sort(), `language ${l}`);
@@ -127,7 +139,7 @@ async function winRate(name, opts = {}) {
   return { wins, total, pct: (100 * wins) / total };
 }
 
-for (const name of ['basket', 'football', 'golf', 'bowling']) {
+for (const name of ['basket', 'football', 'golf', 'bowling', 'darts']) {
   await test(`${name}: winnable but not trivial`, async () => {
     const { wins, total, pct } = await winRate(name);
     console.log(`     ${wins}/${total} random aims score (${pct.toFixed(1)} %)`);

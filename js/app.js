@@ -5,21 +5,23 @@ import football from './games/football.js';
 import baseball from './games/baseball.js';
 import golf from './games/golf.js';
 import bowling from './games/bowling.js';
-import { MAX_TOTAL, ToolError, parseRanges, compressImages, mergePdfs, imagesToPdf, splitPdf, zipFiles, bundle } from './tools.js';
+import darts from './games/darts.js';
+import { MAX_TOTAL, ToolError, IMAGE_EXT, TEXT_EXT, ext, parseRanges, compressImages, mergePdfs, imagesToPdf, splitPdf, pdfToImages, zipFiles, bundle } from './tools.js';
 
-const SPORTS = { basket, football, baseball, golf, bowling };
-const HOW = { basket: 'howBasket', football: 'howFootball', baseball: 'howBaseball', golf: 'howGolf', bowling: 'howBowling' };
-const EMOJI = { basket: '🏀', football: '⚽', baseball: '⚾', golf: '⛳', bowling: '🎳' };
-const IMG = ['image/jpeg', 'image/png', 'image/webp'];
+const SPORTS = { basket, football, baseball, golf, bowling, darts };
+const HOW = { basket: 'howBasket', football: 'howFootball', baseball: 'howBaseball', golf: 'howGolf', bowling: 'howBowling', darts: 'howDarts' };
+const EMOJI = { basket: '🏀', football: '⚽', baseball: '⚾', golf: '⛳', bowling: '🎳', darts: '🎯' };
 
-// Each tool has its own sport. `accept` filters dropped files; `run` does the work.
+// Each tool has its own sport. `accept` lists file extensions (null = anything); `run` does the work.
 const TOOLS = [
-  { id: 'compress', sport: 'basket', accept: IMG, formats: 'JPG, PNG, WebP', min: 1, multiple: true,
+  { id: 'compress', sport: 'basket', accept: ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp'], min: 1, multiple: true,
     run: (files, o) => compressImages(files, { quality: o.quality / 100, maxSide: Number(o.maxSide) || Infinity }) },
-  { id: 'merge', sport: 'football', accept: ['application/pdf'], formats: 'PDF', min: 2, multiple: true, reorder: true, run: (files) => mergePdfs(files) },
-  { id: 'img2pdf', sport: 'baseball', accept: [...IMG, 'image/gif', 'image/bmp'], formats: 'JPG, PNG, WebP, GIF, BMP', min: 1, multiple: true, reorder: true,
+  { id: 'merge', sport: 'football', accept: ['pdf'], min: 2, multiple: true, reorder: true, run: (files) => mergePdfs(files) },
+  { id: 'img2pdf', sport: 'baseball', accept: [...IMAGE_EXT, ...TEXT_EXT], min: 1, multiple: true, reorder: true,
     run: (files, o) => imagesToPdf(files, { pageSize: o.pageSize }) },
-  { id: 'split', sport: 'golf', accept: ['application/pdf'], formats: 'PDF', min: 1, multiple: false, run: (files, o) => splitPdf(files, o) },
+  { id: 'split', sport: 'golf', accept: ['pdf'], min: 1, multiple: false, run: (files, o) => splitPdf(files, o) },
+  { id: 'pdf2img', sport: 'darts', accept: ['pdf'], min: 1, multiple: false,
+    run: (files, o) => pdfToImages(files, { format: o.format, scale: Number(o.scale) }) },
   { id: 'zip', sport: 'bowling', accept: null, min: 1, multiple: true, run: (files) => zipFiles(files) },
 ];
 const byId = Object.fromEntries(TOOLS.map((x) => [x.id, x]));
@@ -102,7 +104,7 @@ function renderHome() {
 
 /* ---------- tool view ---------- */
 function defaults(x) {
-  return { compress: { quality: 70, maxSide: '' }, img2pdf: { pageSize: 'fit' }, split: { mode: 'all', ranges: '' } }[x.id] ?? {};
+  return { compress: { quality: 70, maxSide: '' }, img2pdf: { pageSize: 'fit' }, pdf2img: { format: 'jpeg', scale: '2' }, split: { mode: 'all', ranges: '' } }[x.id] ?? {};
 }
 
 function renderToolHead() {
@@ -112,8 +114,8 @@ function renderToolHead() {
   $('tool-sport').textContent = t('sportLabel', { sport: `${EMOJI[tool.sport]} ${t(tool.sport)}` });
   const input = $('file-input');
   input.multiple = tool.multiple;
-  input.accept = tool.accept ? tool.accept.join(',') : '';
-  $('drop-formats').textContent = tool.accept ? t('formats', { f: tool.formats }) : t('anyFormat');
+  input.accept = tool.accept ? tool.accept.map((e) => `.${e}`).join(',') : '';
+  $('drop-formats').textContent = tool.accept ? t('formats', { f: tool.accept.filter((e) => !['jpeg', 'htm', 'heif'].includes(e)).map((e) => e.toUpperCase()).join(', ') }) : t('anyFormat');
 }
 
 function notice(text) {
@@ -124,7 +126,7 @@ function notice(text) {
 
 function addFiles(list) {
   const incoming = [...list];
-  const ok = incoming.filter((f) => !tool.accept || tool.accept.includes(f.type) || (f.type === '' && /\.pdf$/i.test(f.name) && tool.accept.includes('application/pdf')));
+  const ok = incoming.filter((f) => !tool.accept || tool.accept.includes(ext(f.name)));
   const rejected = incoming.filter((f) => !ok.includes(f));
   files = tool.multiple ? [...files, ...ok] : ok.slice(0, 1).concat(ok.length ? [] : files);
   notice(rejected.length ? rejected.map((f) => t('errType', { name: f.name })).join(' ') : null);
@@ -163,6 +165,9 @@ function renderOptions() {
     nodes.push(field(t('maxSide'), select('maxSide', [['', t('original')], ['2560', '2560 px'], ['1920', '1920 px'], ['1280', '1280 px'], ['800', '800 px']])));
   } else if (tool.id === 'img2pdf') {
     nodes.push(field(t('pageSize'), select('pageSize', [['fit', t('fit')], ['a4', t('a4')]])));
+  } else if (tool.id === 'pdf2img') {
+    nodes.push(field(t('imgFormat'), select('format', [['jpeg', 'JPG'], ['png', 'PNG']])));
+    nodes.push(field(t('resolution'), select('scale', [['1', t('resLow')], ['2', t('resNormal')], ['4', t('resHigh')]])));
   } else if (tool.id === 'split') {
     nodes.push(field(t('splitMode'), select('mode', [['all', t('splitAll')], ['range', t('splitRange')]])));
     if (options.mode === 'range') {
@@ -217,7 +222,7 @@ $('play-btn').addEventListener('click', () => {
   if (blocker()) return;
   const snapshot = [...files];
   job = tool.run(snapshot, { ...options }).then(
-    async (outs) => ({ outs, file: await bundle(outs, `fileshot-${tool.id}.zip`) }),
+    async (outs) => ({ outs, file: await bundle(outs, `${snapshot.length === 1 ? snapshot[0].name.replace(/\.[^.]+$/, '') : 'fileshot'}-${tool.id === 'pdf2img' ? 'pages' : 'min'}.zip`) }),
     (err) => ({ err }));
   setFails(0);
   const skip = $('skip-btn');
